@@ -24,6 +24,9 @@ requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar
 # 🟢 Thêm INTERNET + ACCESS_NETWORK_STATE để in Wi-Fi hoạt động
 android.permissions = INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,CAMERA
 
+# === SỬ DỤNG FILE MANIFEST TỰ TẠO ===
+android.manifest = android-manifest.xml
+
 # === THÊM DÒNG NÀY ĐỂ TẠO ĐÚNG MANIFEST ===
 android.manifest.extra = <uses-feature android:name="android.hardware.camera" android:required="false" />
 
