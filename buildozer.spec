@@ -18,11 +18,13 @@ fullscreen = 0
 
 # --- Thư viện yêu cầu ---
 # ⚡ Dành riêng cho Android (Bluetooth + giao diện Kivy + Wi-Fi)
-requirements = python3,kivy,pyjnius,pillow,plyer,certifi,python-barcode
+requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar
 
 # --- Quyền Android ---
 # 🟢 Thêm INTERNET + ACCESS_NETWORK_STATE để in Wi-Fi hoạt động
-android.permissions = INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+android.permissions = INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,CAMERA
+
+android.add_src = libzbar
 
 # --- Tài nguyên đính kèm ---
 # android.add_assets = arial.ttf,wifi_printers.json
