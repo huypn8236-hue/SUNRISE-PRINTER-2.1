@@ -103,10 +103,10 @@ if is_android():
     from jnius import autoclass
     import socket
     from kivy.uix.camera import Camera
+    from android.permissions import request_permissions, Permission, check_permission
 
     def request_android_permissions():
         try:
-            from android.permissions import request_permissions, Permission
             permissions = [
                 Permission.BLUETOOTH,
                 Permission.BLUETOOTH_ADMIN,
@@ -240,11 +240,19 @@ if is_android():
             """Khi vào màn hình, bắt đầu scan"""
             try:
                 from pyzbar.pyzbar import decode
+                
+                # Kiểm tra quyền Camera
+                if not check_permission(Permission.CAMERA):
+                    self.status_label.text = "❌ Không có quyền Camera"
+                    return
+                
                 self.is_scanning = True
-                self.status_label.text = "📷 Đang scan..."
+                self.status_label.text = "Đang scan..."
                 Clock.schedule_interval(self.scan_frame, 0.5)
             except ImportError:
                 self.status_label.text = "❌ pyzbar chưa được cài"
+            except Exception as e:
+                self.status_label.text = f"❌ Lỗi: {str(e)[:30]}"
 
         def on_leave(self):
             """Khi rời màn hình, dừng scan"""
@@ -276,7 +284,7 @@ if is_android():
                         data = barcode.data.decode('utf-8')
                         self.scanned_data = data
                         self.result_label.text = f"✅ {data}"
-                        self.status_label.text = "✅ Đã nhận diện!"
+                        self.status_label.text = "Đã nhận diện!"
                         self.is_scanning = False
                         Clock.unschedule(self.scan_frame)
                         Clock.schedule_once(lambda dt: self.go_back_with_data(), 0.5)
@@ -655,12 +663,13 @@ class PrinterManagerScreen(Screen):
         self.device_list.add_widget(self.container)
         layout.add_widget(self.device_list)
         
-        btn_refresh = Button(text="🔄 Làm mới danh sách", size_hint_y=None, height=dp(40),
+        # Đã bỏ symbol 📷 🔄 📡
+        btn_refresh = Button(text="Làm mới danh sách", size_hint_y=None, height=dp(40),
                              background_color=COLOR_PRIMARY, color=COLOR_WHITE, font_size=sp(14))
         btn_refresh.bind(on_release=lambda x: self.refresh_devices())
         layout.add_widget(btn_refresh)
         
-        btn_test = Button(text="📡 Test kết nối", size_hint_y=None, height=dp(40),
+        btn_test = Button(text="Test kết nối", size_hint_y=None, height=dp(40),
                           background_color=COLOR_WARNING, color=COLOR_WHITE, font_size=sp(14))
         btn_test.bind(on_release=self.test_connection)
         layout.add_widget(btn_test)
@@ -720,7 +729,7 @@ class PrinterManagerScreen(Screen):
             row.add_widget(mac_lbl)
             
             if is_selected:
-                status = Label(text="✅ Đã chọn", font_size=sp(12), color=COLOR_SUCCESS,
+                status = Label(text="Đã chọn", font_size=sp(12), color=COLOR_SUCCESS,
                                halign='center', valign='middle', size_hint_x=0.25)
                 status.bind(size=status.setter('text_size'))
                 row.add_widget(status)
@@ -746,7 +755,7 @@ class PrinterManagerScreen(Screen):
     def select_printer(self, mac, name):
         save_selected_printer(mac, name)
         self.refresh_devices()
-        popup = Popup(title="✅ Đã chọn", 
+        popup = Popup(title="Đã chọn", 
                       content=Label(text=f"Đã chọn máy in:\n{name}"),
                       size_hint=(.8,.4))
         popup.open()
@@ -762,11 +771,11 @@ class PrinterManagerScreen(Screen):
         ok, err = print_via_bluetooth_pyjnius(mac, test_data)
         
         if ok:
-            Popup(title="✅ Thành công", 
+            Popup(title="Thành công", 
                   content=Label(text=f"Kết nối với {name} thành công!"),
                   size_hint=(.8,.4)).open()
         else:
-            Popup(title="❌ Lỗi", 
+            Popup(title="Lỗi", 
                   content=Label(text=f"Kết nối thất bại:\n{err}"),
                   size_hint=(.8,.4)).open()
 
@@ -832,7 +841,7 @@ class HomeScreen(Screen):
         self.so_input = TextInput(hint_text="SO Num", font_size=sp(18), multiline=False,
                                   size_hint_x=0.7, background_color=(0.95,0.95,0.95,1),
                                   foreground_color=COLOR_BLACK, padding=[dp(10), dp(6)])
-        scan_btn = Button(text="📷 SCAN", font_size=sp(14), size_hint_x=0.3,
+        scan_btn = Button(text="SCAN", font_size=sp(14), size_hint_x=0.3,
                           background_color=COLOR_PRIMARY, color=COLOR_WHITE, bold=True)
         scan_btn.bind(on_release=self.open_scanner)
         so_box.add_widget(self.so_input)
@@ -939,22 +948,26 @@ class HomeScreen(Screen):
             return
         
         try:
+            # Xin quyền Camera
+            if not check_permission(Permission.CAMERA):
+                request_permissions([Permission.CAMERA])
+                time.sleep(0.5)
+            
+            if not check_permission(Permission.CAMERA):
+                Popup(title="Lỗi", 
+                      content=Label(text="Không có quyền Camera.\nVui lòng cấp quyền trong Settings."),
+                      size_hint=(.8,.4)).open()
+                return
+            
             # Thêm ScannerScreen vào manager nếu chưa có
             if not self.manager.has_screen("scanner"):
-                from android.permissions import request_permissions, Permission
-                request_permissions([Permission.CAMERA])
-                
-                # Import ScannerScreen từ module chính (đã định nghĩa bên trên)
-                # Do ScannerScreen được định nghĩa trong if is_android(), nên nó chỉ tồn tại trên Android
-                if not self.manager.has_screen("scanner"):
-                    # Lấy class ScannerScreen từ module hiện tại
-                    scanner_class = globals().get('ScannerScreen')
-                    if scanner_class:
-                        self.manager.add_widget(scanner_class(name="scanner"))
-                    else:
-                        Popup(title="Lỗi", content=Label(text="Không thể tạo ScannerScreen"),
-                              size_hint=(.8,.4)).open()
-                        return
+                scanner_class = globals().get('ScannerScreen')
+                if scanner_class:
+                    self.manager.add_widget(scanner_class(name="scanner"))
+                else:
+                    Popup(title="Lỗi", content=Label(text="Không thể tạo ScannerScreen"),
+                          size_hint=(.8,.4)).open()
+                    return
             
             self.manager.current = "scanner"
         except Exception as e:
@@ -978,7 +991,9 @@ class HomeScreen(Screen):
             name = devices[0][0]
             save_selected_printer(mac, name)
 
-        test_data = b'^XA\n^FO50,50^ADN,36,20^FDTest Print^FS\n^XZ\n'
+        test_data = b'^XA\n^FO50,50^ADN,36,20^FDTest Print^FS\n'
+        test_data += b'^FO50,80^ADN,24,16^FDDevelop by Huy Pham Copyright.^FS\n'
+        test_data += b'^XZ\n'
 
         popup_content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
         status_label = Label(text="Đang in test...", font_size=sp(16))
@@ -990,11 +1005,11 @@ class HomeScreen(Screen):
             ok, err = print_via_bluetooth_pyjnius(mac, test_data)
             popup.dismiss()
             if ok:
-                Popup(title="✅ Thành công",
+                Popup(title="Thành công",
                       content=Label(text=f"Test in thành công!\nMáy: {name}"),
                       size_hint=(.8,.4)).open()
             else:
-                Popup(title="❌ Lỗi",
+                Popup(title="Lỗi",
                       content=Label(text=f"Test in thất bại:\n{err}"),
                       size_hint=(.8,.4)).open()
 
