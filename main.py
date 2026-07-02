@@ -21,6 +21,7 @@ from kivy.metrics import dp, sp
 from kivy.core.window import Window
 from kivy.utils import platform
 from kivy.graphics import Color, RoundedRectangle
+from kivy.uix.spinner import Spinner
 
 # ---------- THƯ VIỆN ẢNH ----------
 try:
@@ -30,18 +31,9 @@ except ImportError:
     HAS_PIL = False
     print("Pillow chưa được cài. Hãy chạy: pip install Pillow")
 
-# ---------- THƯ VIỆN BARCODE (THẬT) ----------
-try:
-    import barcode
-    from barcode.writer import ImageWriter
-    from io import BytesIO
-    HAS_BARCODE = True
-except ImportError:
-    HAS_BARCODE = False
-    print("python-barcode chưa được cài. Hãy chạy: pip install python-barcode")
-
 # ---------- CẤU HÌNH ----------
 HISTORY_FILE = "print_history.json"
+SELECTED_PRINTER_FILE = "selected_printer.json"
 
 # MÀU SẮC
 COLOR_PRIMARY = (0.26, 0.65, 0.96, 1)
@@ -53,6 +45,26 @@ COLOR_GRAY = (0.6, 0.6, 0.6, 1)
 COLOR_LIGHT_GRAY = (0.96, 0.96, 0.96, 1)
 COLOR_WHITE = (1, 1, 1, 1)
 COLOR_BLACK = (0.1, 0.1, 0.1, 1)
+
+# ---------- HÀM LƯU/ĐỌC MÁY IN ĐÃ CHỌN ----------
+def save_selected_printer(mac, name):
+    """Lưu máy in đã chọn"""
+    try:
+        with open(SELECTED_PRINTER_FILE, "w", encoding="utf-8") as f:
+            json.dump({"mac": mac, "name": name}, f)
+    except Exception as e:
+        print("Cannot save selected printer:", e)
+
+def load_selected_printer():
+    """Đọc máy in đã chọn"""
+    if os.path.exists(SELECTED_PRINTER_FILE):
+        try:
+            with open(SELECTED_PRINTER_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return data.get("mac"), data.get("name")
+        except:
+            return None, None
+    return None, None
 
 # ---------- HÀM TIỆN ÍCH LỊCH SỬ ----------
 def load_history():
@@ -89,46 +101,29 @@ def has_been_printed(order_id):
 def is_android():
     return platform == "android"
 
-# ---------- HÀM TẠO BARCODE THẬT ----------
-def create_barcode_image(order_id, width=320, height=90):
-    """
-    Tạo ảnh barcode Code128 THẬT (scan được)
-    - width: 320px (40mm)
-    - height: 90px (bằng font size Box)
-    """
-    if not HAS_BARCODE:
-        return None
+# ---------- HÀM TẠO BARCODE GIẢ CHO PREVIEW ----------
+def create_fake_barcode(order_id, width=320, height=90):
+    """Vẽ barcode giả lập cho preview"""
+    img = Image.new('RGB', (width, height), 'white')
+    draw = ImageDraw.Draw(img)
     
-    try:
-        width = int(width)
-        height = int(height)
-        
-        code128 = barcode.get_barcode_class('code128')
-        barcode_obj = code128(str(order_id), writer=ImageWriter())
-        
-        buffer = BytesIO()
-        barcode_obj.write(buffer, options={
-            'write_text': False,
-            'module_width': 0.3,
-            'module_height': 15,
-            'quiet_zone': 2,
-            'background': 'white',
-            'foreground': 'black'
-        })
-        
-        buffer.seek(0)
-        barcode_img = Image.open(buffer)
-        
-        if barcode_img.mode != 'RGB':
-            barcode_img = barcode_img.convert('RGB')
-        
-        barcode_img = barcode_img.resize((int(width), int(height)), Image.LANCZOS)
-        
-        return barcode_img
-        
-    except Exception as e:
-        print(f"Barcode error: {e}")
-        return None
+    seed = 0
+    for char in order_id:
+        seed += ord(char)
+    random.seed(seed)
+    
+    bar_width = max(2, width // 35)
+    x = 2
+    while x < width - bar_width:
+        bar_height = height - random.randint(5, 20)
+        draw.rectangle([int(x), 2, int(x + bar_width - 1), int(bar_height)], fill='black')
+        gap = random.randint(bar_width, bar_width * 2)
+        x += bar_width + gap
+    
+    if x < width - 2:
+        draw.rectangle([int(x), 2, int(width - 2), int(height - random.randint(5, 20))], fill='black')
+    
+    return img
 
 # ---------- MODULE CHO ANDROID ----------
 if is_android():
@@ -337,7 +332,7 @@ def create_label_image(order_id, customer, box_index, box_total,
     font_bold_path = find_system_font_bold()
     if font_bold_path:
         try:
-            font_order_bold = ImageFont.truetype(font_bold_path, size=85)
+            font_order_bold = ImageFont.truetype(font_bold_path, size=70)
         except:
             font_order_bold = ImageFont.load_default()
     else:
@@ -347,8 +342,8 @@ def create_label_image(order_id, customer, box_index, box_total,
     font_path = find_system_font()
     if font_path:
         try:
-            font_name = ImageFont.truetype(font_path, size=75)
-            font_box = ImageFont.truetype(font_path, size=77)
+            font_name = ImageFont.truetype(font_path, size=65)
+            font_box = ImageFont.truetype(font_path, size=67)
         except:
             font_name = ImageFont.load_default()
             font_box = ImageFont.load_default()
@@ -370,8 +365,8 @@ def create_label_image(order_id, customer, box_index, box_total,
 
     y3 = int(padding_y + section_height * 2 + section_height * 0.1)
 
-    # BARCODE THẬT (scan được) - 320x90
-    barcode_img = create_barcode_image(order_id, width=320, height=90)
+    # BARCODE GIẢ CHO PREVIEW
+    barcode_img = create_fake_barcode(order_id, width=320, height=90)
     if barcode_img:
         barcode_y = int(y3 + (90 - int(barcode_img.size[1])) // 2)
         img.paste(barcode_img, (int(padding_x), barcode_y))
@@ -384,14 +379,11 @@ def create_label_image(order_id, customer, box_index, box_total,
 
     return img
 
-# ---------- TẠO ẢNH RASTER CHO ZPL2 ----------
-def create_zpl_raster(order_id, customer, box_index, box_total,
-                      width_mm=115, height_mm=70, dpi=203):
+# ---------- TẠO ẢNH RASTER CHO ZPL2 (KHÔNG BARCODE) ----------
+def create_zpl_raster_no_barcode(order_id, customer, box_index, box_total,
+                                  width_mm=115, height_mm=70, dpi=203):
     """
-    Tạo ảnh raster cho ZPL2:
-    - Font: 120-85-90
-    - Dòng 1: In đậm
-    - Barcode 320x90 căn trái + Box căn phải
+    Tạo ảnh raster KHÔNG có barcode (barcode sẽ được ZPL in trực tiếp)
     """
     if not HAS_PIL:
         raise ImportError("Pillow chưa được cài đặt.")
@@ -402,11 +394,11 @@ def create_zpl_raster(order_id, customer, box_index, box_total,
     img = Image.new('RGB', (width_px, height_px), 'white')
     draw = ImageDraw.Draw(img)
 
-    # === FONT BOLD CHO DÒNG 1 ===
+    # === FONT BOLD CHO DÒNG 1 (TĂNG LÊN 130) ===
     font_bold_path = find_system_font_bold()
     if font_bold_path:
         try:
-            font_order_bold = ImageFont.truetype(font_bold_path, size=120)
+            font_order_bold = ImageFont.truetype(font_bold_path, size=130)
         except:
             font_order_bold = ImageFont.load_default()
     else:
@@ -431,26 +423,23 @@ def create_zpl_raster(order_id, customer, box_index, box_total,
     usable_height = height_px - padding_y * 2
     section_height = usable_height / 3
 
+    # === DÒNG 1: Mã đơn (IN ĐẬM, SIZE 130) ===
     y1 = int(padding_y + section_height * 0.05)
     draw.text((int(padding_x), y1), order_id, fill='black', font=font_order_bold)
 
+    # === DÒNG 2: Tên khách (SIZE 85) ===
     y2 = int(padding_y + section_height + section_height * 0.05)
     draw.text((int(padding_x), y2), customer, fill='black', font=font_name)
 
+    # === DÒNG 3: Box (SIZE 90, căn phải) - KHÔNG có barcode trong ảnh ===
     y3 = int(padding_y + section_height * 2 + section_height * 0.05)
-
-    # BARCODE THẬT (scan được) - 320x90
-    barcode_img = create_barcode_image(order_id, width=320, height=90)
-    if barcode_img:
-        barcode_y = int(y3 + (90 - int(barcode_img.size[1])) // 2)
-        img.paste(barcode_img, (int(padding_x), barcode_y))
-
     box_text = f"Box: #{box_index} / {box_total}"
     bbox = draw.textbbox((0, 0), box_text, font=font_box)
     text_width = bbox[2] - bbox[0]
     x_pos = int(width_px - text_width - padding_x)
     draw.text((x_pos, int(y3)), box_text, fill='black', font=font_box)
 
+    # XOAY 90° TRONG PILLOW (form ngang)
     img_rotated = img.rotate(90, expand=True)
     img_bw = img_rotated.convert('1')
     
@@ -549,19 +538,34 @@ def pil_to_zpl_gf_chunked(img, max_bytes_per_chunk=30*1024):
     return chunks
 
 def get_label_zpl_bytes(order_id, customer, box_index, box_total):
-    img = create_zpl_raster(order_id, customer, box_index, box_total,
-                            width_mm=115, height_mm=70, dpi=203)
+    """
+    Tạo lệnh ZPL2 - In barcode trực tiếp bằng ZPL
+    """
+    img = create_zpl_raster_no_barcode(order_id, customer, box_index, box_total,
+                                        width_mm=115, height_mm=70, dpi=203)
 
     chunks = pil_to_zpl_gf_chunked(img, max_bytes_per_chunk=30*1024)
 
     width_px, height_px = img.size
 
+    # Tính vị trí y3 (cùng hàng với Box)
+    padding_y = int(height_px * 0.03)
+    usable_height = height_px - padding_y * 2
+    section_height = usable_height / 3
+    y3 = int(padding_y + section_height * 2 + section_height * 0.05)
+
     cmd = ""
     cmd += "^XA\n"
-    cmd += "^FWN\n"
     cmd += f"^PW{width_px}\n"
     cmd += f"^LL{height_px}\n"
     
+    # === BARCODE ZPL (căn trái, cùng hàng với Box) ===
+    barcode_width = 320
+    barcode_height = 90
+    # ^B1 = Code128, N = Không xoay, N = Không check digit, height, width
+    cmd += f"^FO{int(20)},{int(y3)}^B1N,N,{int(barcode_height)},{int(barcode_width)},Y,N^FD{order_id}^FS\n"
+    
+    # === ẢNH (chứa Box căn phải) ===
     for chunk in chunks:
         cmd += f"^FO0,{chunk['start_y']}\n"
         cmd += f"^GFA,{chunk['total_bytes']},{chunk['total_bytes']},{chunk['width_bytes']},{chunk['hex_data']}\n"
@@ -593,29 +597,161 @@ class PrinterManagerScreen(Screen):
         layout = BoxLayout(orientation='vertical', padding=dp(16), spacing=dp(12))
         layout.add_widget(Label(text="MÁY IN", font_size=sp(24), bold=True,
                                 size_hint_y=None, height=dp(50), color=COLOR_PRIMARY_DARK))
+        
+        # === SPINNER CHỌN MÁY IN ===
+        layout.add_widget(Label(text="Chọn máy in mặc định:", font_size=sp(16), color=COLOR_GRAY,
+                                size_hint_y=None, height=dp(30)))
+        
+        self.printer_spinner = Spinner(
+            text="-- Chọn máy in --",
+            values=["-- Chọn máy in --"],
+            size_hint_y=None,
+            height=dp(44),
+            background_color=(1,1,1,1),
+            color=COLOR_BLACK,
+            font_size=sp(16)
+        )
+        self.printer_spinner.bind(text=self.on_printer_selected)
+        layout.add_widget(self.printer_spinner)
+        
+        # === DANH SÁCH THIẾT BỊ ===
         self.device_list = ScrollView()
-        container = GridLayout(cols=1, spacing=dp(6), size_hint_y=None)
-        container.bind(minimum_height=container.setter('height'))
-        if is_android():
-            devices = find_paired_printers_pyjnius()
-            if devices:
-                for name, addr in devices:
-                    lbl = Label(text=f"{name} - {addr}", font_size=sp(16),
-                                size_hint_y=None, height=dp(40), color=COLOR_BLACK)
-                    container.add_widget(lbl)
-            else:
-                container.add_widget(Label(text="Chưa có máy in Bluetooth nào được ghép nối",
-                                          font_size=sp(16), color=COLOR_GRAY))
-        else:
-            container.add_widget(Label(text="(Chức năng này chỉ có trên Android)",
-                                      font_size=sp(16), color=COLOR_GRAY))
-        self.device_list.add_widget(container)
+        self.container = GridLayout(cols=1, spacing=dp(6), size_hint_y=None)
+        self.container.bind(minimum_height=self.container.setter('height'))
+        self.device_list.add_widget(self.container)
         layout.add_widget(self.device_list)
+        
+        # Nút refresh
+        btn_refresh = Button(text="🔄 Làm mới danh sách", size_hint_y=None, height=dp(40),
+                             background_color=COLOR_PRIMARY, color=COLOR_WHITE, font_size=sp(14))
+        btn_refresh.bind(on_release=lambda x: self.refresh_devices())
+        layout.add_widget(btn_refresh)
+        
+        # Nút test kết nối
+        btn_test = Button(text="📡 Test kết nối", size_hint_y=None, height=dp(40),
+                          background_color=COLOR_WARNING, color=COLOR_WHITE, font_size=sp(14))
+        btn_test.bind(on_release=self.test_connection)
+        layout.add_widget(btn_test)
+        
         btn_back = Button(text="Về trang chủ", size_hint_y=None, height=dp(48),
                           background_color=COLOR_GRAY, color=COLOR_WHITE, font_size=sp(16))
         btn_back.bind(on_release=lambda *_: setattr(self.manager, "current", "home"))
         layout.add_widget(btn_back)
+        
         self.add_widget(layout)
+        self._first_load = True
+
+    def on_enter(self, *args):
+        """Khi vào màn hình, refresh danh sách"""
+        self.refresh_devices()
+
+    def refresh_devices(self):
+        """Hiển thị danh sách thiết bị Bluetooth đã ghép nối"""
+        self.container.clear_widgets()
+        
+        if not is_android():
+            self.container.add_widget(Label(text="(Chức năng này chỉ có trên Android)",
+                                          font_size=sp(16), color=COLOR_GRAY))
+            return
+        
+        devices = find_paired_printers_pyjnius()
+        
+        # Cập nhật Spinner
+        if devices:
+            spinner_values = ["-- Chọn máy in --"]
+            for name, addr in devices:
+                spinner_values.append(f"{name} ({addr[-6:]})")
+            self.printer_spinner.values = spinner_values
+        
+        if not devices:
+            self.container.add_widget(Label(text="Chưa có máy in Bluetooth nào được ghép nối",
+                                          font_size=sp(16), color=COLOR_GRAY))
+            return
+        
+        # Đọc máy in đã chọn
+        selected_mac, selected_name = load_selected_printer()
+        
+        # Cập nhật spinner nếu đã chọn
+        if selected_name and selected_mac:
+            for name, addr in devices:
+                if addr == selected_mac:
+                    self.printer_spinner.text = f"{name} ({addr[-6:]})"
+                    break
+        
+        # Hiển thị danh sách thiết bị
+        for name, addr in devices:
+            row = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(8))
+            
+            is_selected = (addr == selected_mac)
+            
+            lbl = Label(text=f"{name}", font_size=sp(16), color=COLOR_BLACK,
+                       halign='left', valign='middle', size_hint_x=0.5)
+            lbl.bind(size=lbl.setter('text_size'))
+            row.add_widget(lbl)
+            
+            mac_lbl = Label(text=addr[-6:], font_size=sp(12), color=COLOR_GRAY,
+                           halign='left', valign='middle', size_hint_x=0.25)
+            mac_lbl.bind(size=mac_lbl.setter('text_size'))
+            row.add_widget(mac_lbl)
+            
+            if is_selected:
+                status = Label(text="✅ Đã chọn", font_size=sp(12), color=COLOR_SUCCESS,
+                               halign='center', valign='middle', size_hint_x=0.25)
+                status.bind(size=status.setter('text_size'))
+                row.add_widget(status)
+            else:
+                btn = Button(text="Chọn", size_hint_x=0.25,
+                            background_color=COLOR_PRIMARY, color=COLOR_WHITE,
+                            font_size=sp(12))
+                btn.bind(on_release=lambda x, a=addr, n=name: self.select_printer(a, n))
+                row.add_widget(btn)
+            
+            self.container.add_widget(row)
+
+    def on_printer_selected(self, spinner, text):
+        """Khi người dùng chọn từ Spinner"""
+        if text == "-- Chọn máy in --":
+            return
+        
+        devices = find_paired_printers_pyjnius()
+        for name, addr in devices:
+            if f"{name} ({addr[-6:]})" == text:
+                self.select_printer(addr, name)
+                break
+
+    def select_printer(self, mac, name):
+        """Chọn máy in và lưu lại"""
+        save_selected_printer(mac, name)
+        
+        # Refresh danh sách
+        self.refresh_devices()
+        
+        # Thông báo
+        popup = Popup(title="✅ Đã chọn", 
+                      content=Label(text=f"Đã chọn máy in:\n{name}"),
+                      size_hint=(.8,.4))
+        popup.open()
+
+    def test_connection(self, *args):
+        """Test kết nối với máy in đã chọn"""
+        mac, name = load_selected_printer()
+        if mac is None:
+            Popup(title="Lỗi", content=Label(text="Chưa chọn máy in!"),
+                  size_hint=(.8,.4)).open()
+            return
+        
+        # Gửi lệnh test ZPL đơn giản
+        test_data = b'^XA\n^FO50,50^ADN,36,20^FDTest Connection^FS\n^XZ\n'
+        ok, err = print_via_bluetooth_pyjnius(mac, test_data)
+        
+        if ok:
+            Popup(title="✅ Thành công", 
+                  content=Label(text=f"Kết nối với {name} thành công!"),
+                  size_hint=(.8,.4)).open()
+        else:
+            Popup(title="❌ Lỗi", 
+                  content=Label(text=f"Kết nối thất bại:\n{err}"),
+                  size_hint=(.8,.4)).open()
 
 class HistoryScreen(Screen):
     def __init__(self, **kwargs):
@@ -777,13 +913,17 @@ class HomeScreen(Screen):
                   size_hint=(.8,.4)).open()
             return
 
-        devices = find_paired_printers_pyjnius()
-        if not devices:
-            Popup(title="Lỗi", content=Label(text="Không tìm thấy máy in Bluetooth"),
-                  size_hint=(.8,.4)).open()
-            return
-
-        mac = devices[0][1]
+        # Lấy máy in đã chọn
+        mac, name = load_selected_printer()
+        if mac is None:
+            devices = find_paired_printers_pyjnius()
+            if not devices:
+                Popup(title="Lỗi", content=Label(text="Không tìm thấy máy in Bluetooth"),
+                      size_hint=(.8,.4)).open()
+                return
+            mac = devices[0][1]
+            name = devices[0][0]
+            save_selected_printer(mac, name)
 
         test_data = b'^XA\n^FO50,50^ADN,36,20^FDTest Print^FS\n^XZ\n'
 
@@ -798,7 +938,7 @@ class HomeScreen(Screen):
             popup.dismiss()
             if ok:
                 Popup(title="✅ Thành công",
-                      content=Label(text="Test in ZPL thành công!"),
+                      content=Label(text=f"Test in thành công!\nMáy: {name}"),
                       size_hint=(.8,.4)).open()
             else:
                 Popup(title="❌ Lỗi",
@@ -849,9 +989,21 @@ class HomeScreen(Screen):
         root.add_widget(Label(text=f"In {box_n} nhãn", font_size=sp(18), bold=True))
 
         if is_android():
-            btn_bt = Button(text="In Bluetooth", size_hint_y=None, height=dp(44),
+            # Lấy máy in đã chọn
+            mac, name = load_selected_printer()
+            if mac is None:
+                devices = find_paired_printers_pyjnius()
+                if not devices:
+                    Popup(title="Lỗi", content=Label(text="Không tìm thấy máy in Bluetooth"),
+                          size_hint=(.8,.4)).open()
+                    return
+                mac = devices[0][1]
+                name = devices[0][0]
+                save_selected_printer(mac, name)
+            
+            btn_bt = Button(text=f"In Bluetooth ({name})", size_hint_y=None, height=dp(44),
                             background_color=COLOR_PRIMARY, color=COLOR_WHITE, font_size=sp(16))
-            btn_bt.bind(on_release=lambda x: self.do_print_bt(oid, cust, box_n, root))
+            btn_bt.bind(on_release=lambda x: self.do_print_bt(oid, cust, box_n, root, mac))
             root.add_widget(btn_bt)
         else:
             btn_pc = Button(text="Lưu ảnh (mô phỏng)", size_hint_y=None, height=dp(44),
@@ -867,15 +1019,9 @@ class HomeScreen(Screen):
         popup = Popup(title="Chọn phương thức in", content=root, size_hint=(.9,.6))
         popup.open()
 
-    def do_print_bt(self, oid, cust, box_n, popup_root):
+    def do_print_bt(self, oid, cust, box_n, popup_root, mac):
         if not is_android():
             return
-        devices = find_paired_printers_pyjnius()
-        if not devices:
-            Popup(title="Lỗi", content=Label(text="Không tìm thấy máy in Bluetooth"),
-                  size_hint=(.8,.4)).open()
-            return
-        mac = devices[0][1]
         status_label = Label(text="Đang in...", font_size=sp(14), color=COLOR_PRIMARY)
         popup_root.add_widget(status_label)
         Clock.schedule_once(lambda dt: self._print_bt_thread(oid, cust, box_n, mac, status_label, popup_root), 0.1)
