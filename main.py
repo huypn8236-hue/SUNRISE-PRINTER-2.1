@@ -99,11 +99,13 @@ def is_android():
     return platform == "android"
 
 # ---------- MODULE CHO ANDROID ----------
+has_camera = False
 if is_android():
     from jnius import autoclass
     import socket
     from kivy.uix.camera import Camera
     from android.permissions import request_permissions, Permission, check_permission
+    has_camera = True
 
     def request_android_permissions():
         try:
@@ -202,110 +204,173 @@ if is_android():
             print(f"Bluetooth print error: {e}")
             return False, str(e)
 
-    # ---------- MÀN HÌNH SCANNER (CHỈ TRÊN ANDROID) ----------
-    class ScannerScreen(Screen):
-        def __init__(self, **kwargs):
-            super().__init__(**kwargs)
-            layout = BoxLayout(orientation='vertical', padding=dp(12), spacing=dp(8))
-            
-            # Header
-            header = BoxLayout(size_hint_y=None, height=dp(48))
-            back_btn = Button(text="←", font_size=sp(24), size_hint_x=None, width=dp(50),
-                              background_color=COLOR_GRAY, color=COLOR_WHITE)
-            back_btn.bind(on_release=self.go_back)
-            title = Label(text="SCAN BARCODE", font_size=sp(18), bold=True, color=COLOR_PRIMARY_DARK)
-            header.add_widget(back_btn)
-            header.add_widget(title)
-            layout.add_widget(header)
-            
-            # Camera
-            self.camera = Camera(resolution=(640, 480), play=True)
-            layout.add_widget(self.camera)
-            
-            # Status
-            self.status_label = Label(text="Đang chờ scan...", font_size=sp(14),
-                                      size_hint_y=None, height=dp(40), color=COLOR_GRAY)
-            layout.add_widget(self.status_label)
-            
-            # Result
-            self.result_label = Label(text="", font_size=sp(16), size_hint_y=None,
-                                      height=dp(40), color=COLOR_SUCCESS, bold=True)
-            layout.add_widget(self.result_label)
-            
-            self.add_widget(layout)
-            self.is_scanning = False
-            self.scanned_data = None
+# ---------- MÀN HÌNH SCANNER ----------
+class ScannerScreen(Screen):
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.layout = BoxLayout(orientation='vertical', padding=dp(12), spacing=dp(8))
+        
+        # Header
+        header = BoxLayout(size_hint_y=None, height=dp(48))
+        back_btn = Button(text="←", font_size=sp(24), size_hint_x=None, width=dp(50),
+                          background_color=COLOR_GRAY, color=COLOR_WHITE)
+        back_btn.bind(on_release=self.go_back)
+        title = Label(text="SCAN BARCODE", font_size=sp(18), bold=True, color=COLOR_PRIMARY_DARK)
+        header.add_widget(back_btn)
+        header.add_widget(title)
+        self.layout.add_widget(header)
+        
+        # Status
+        self.status_label = Label(text="Đang khởi tạo camera...", font_size=sp(14),
+                                  size_hint_y=None, height=dp(40), color=COLOR_GRAY)
+        self.layout.add_widget(self.status_label)
+        
+        # Camera placeholder
+        self.camera_placeholder = BoxLayout(size_hint=(1, 0.7))
+        self.layout.add_widget(self.camera_placeholder)
+        
+        # Result
+        self.result_label = Label(text="", font_size=sp(16), size_hint_y=None,
+                                  height=dp(40), color=COLOR_SUCCESS, bold=True)
+        self.layout.add_widget(self.result_label)
+        
+        self.add_widget(self.layout)
+        
+        self.camera = None
+        self.is_scanning = False
+        self.scanned_data = None
+        self._camera_started = False
 
-        def on_enter(self):
-            """Khi vào màn hình, bắt đầu scan"""
-            try:
-                from pyzbar.pyzbar import decode
-                
-                # Kiểm tra quyền Camera
-                if not check_permission(Permission.CAMERA):
-                    self.status_label.text = "❌ Không có quyền Camera"
-                    return
-                
-                self.is_scanning = True
-                self.status_label.text = "Đang scan..."
-                Clock.schedule_interval(self.scan_frame, 0.5)
-            except ImportError:
-                self.status_label.text = "❌ pyzbar chưa được cài"
-            except Exception as e:
-                self.status_label.text = f"❌ Lỗi: {str(e)[:30]}"
-
-        def on_leave(self):
-            """Khi rời màn hình, dừng scan"""
-            self.is_scanning = False
-            Clock.unschedule(self.scan_frame)
-
-        def scan_frame(self, dt):
-            """Quét frame từ camera"""
-            if not self.is_scanning or not self.camera.texture:
+    def on_enter(self):
+        """Khi vào màn hình, khởi tạo camera"""
+        if not self._camera_started:
+            if not is_android():
+                self.status_label.text = "❌ Camera chỉ hỗ trợ Android"
                 return
             
+            if not check_permission(Permission.CAMERA):
+                self.status_label.text = "Đang yêu cầu quyền camera..."
+                request_permissions([Permission.CAMERA])
+                Clock.schedule_once(self._check_permission_and_start, 1.5)
+                return
+            
+            self._init_camera()
+
+    def _check_permission_and_start(self, dt):
+        """Kiểm tra quyền sau khi request"""
+        if check_permission(Permission.CAMERA):
+            self._init_camera()
+        else:
+            self.status_label.text = "❌ Chưa cấp quyền Camera\nVào Cài đặt để cấp quyền"
+
+    def _init_camera(self):
+        """Khởi tạo camera"""
+        try:
+            self.status_label.text = "Đang mở camera..."
+            
+            # Tạo camera với độ phân giải thấp hơn để tránh lag
+            self.camera = Camera(resolution=(320, 240), play=False)
+            self.camera_placeholder.add_widget(self.camera)
+            
+            # Delay một chút rồi mới play
+            Clock.schedule_once(self._start_camera_play, 0.3)
+            
+        except Exception as e:
+            self.status_label.text = f"❌ Lỗi camera: {str(e)[:40]}"
+            print(f"Camera init error: {e}")
+
+    def _start_camera_play(self, dt):
+        """Bắt đầu camera sau delay"""
+        try:
+            self.camera.play = True
+            self._camera_started = True
+            self.status_label.text = "Đang scan..."
+            self.is_scanning = True
+            Clock.schedule_interval(self.scan_frame, 0.5)
+        except Exception as e:
+            self.status_label.text = f"❌ Không thể mở camera: {str(e)[:40]}"
+            print(f"Camera play error: {e}")
+
+    def on_leave(self):
+        """Khi rời màn hình, dừng camera"""
+        self.is_scanning = False
+        Clock.unschedule(self.scan_frame)
+        if self.camera:
             try:
-                from pyzbar.pyzbar import decode
-                
-                texture = self.camera.texture
-                if texture is None:
-                    return
-                
-                data = texture.pixels
-                width = texture.width
-                height = texture.height
-                
-                img = Image.frombytes('RGBA', (width, height), data)
-                img = img.convert('RGB')
-                
-                barcodes = decode(img)
-                if barcodes:
-                    for barcode in barcodes:
-                        data = barcode.data.decode('utf-8')
-                        self.scanned_data = data
-                        self.result_label.text = f"✅ {data}"
-                        self.status_label.text = "Đã nhận diện!"
-                        self.is_scanning = False
-                        Clock.unschedule(self.scan_frame)
-                        Clock.schedule_once(lambda dt: self.go_back_with_data(), 0.5)
-                        break
-            except Exception as e:
-                print(f"Scan error: {e}")
+                self.camera.play = False
+            except:
+                pass
 
-        def go_back(self, *args):
-            """Quay về mà không có dữ liệu"""
+    def scan_frame(self, dt):
+        """Quét frame từ camera"""
+        if not self.is_scanning:
+            return
+        
+        if not self.camera or not self.camera.texture:
+            return
+        
+        try:
+            from pyzbar.pyzbar import decode
+            
+            texture = self.camera.texture
+            if texture is None:
+                return
+            
+            # Lấy pixels từ texture
+            pixels_data = texture.pixels
+            width = int(texture.width)
+            height = int(texture.height)
+            
+            if not pixels_data or width == 0 or height == 0:
+                return
+            
+            # Chuyển thành PIL Image
+            img = Image.frombytes('RGBA', (width, height), pixels_data)
+            img = img.convert('RGB')
+            
+            # Quét barcode
+            barcodes = decode(img)
+            if barcodes:
+                for barcode in barcodes:
+                    data = barcode.data.decode('utf-8')
+                    self.scanned_data = data
+                    self.result_label.text = f"✅ {data}"
+                    self.status_label.text = "Đã nhận diện!"
+                    self.is_scanning = False
+                    Clock.unschedule(self.scan_frame)
+                    Clock.schedule_once(lambda dt: self.go_back_with_data(), 0.8)
+                    break
+        except ImportError:
+            self.status_label.text = "❌ pyzbar chưa được cài"
             self.is_scanning = False
             Clock.unschedule(self.scan_frame)
-            self.manager.current = "home"
+        except Exception as e:
+            print(f"Scan error: {e}")
 
-        def go_back_with_data(self, *args):
-            """Quay về và truyền dữ liệu scan được"""
-            self.is_scanning = False
-            Clock.unschedule(self.scan_frame)
-            home = self.manager.get_screen("home")
-            if hasattr(home, 'so_input'):
-                home.so_input.text = self.scanned_data
-            self.manager.current = "home"
+    def go_back(self, *args):
+        """Quay về không dữ liệu"""
+        self.is_scanning = False
+        Clock.unschedule(self.scan_frame)
+        if self.camera:
+            try:
+                self.camera.play = False
+            except:
+                pass
+        self.manager.current = "home"
+
+    def go_back_with_data(self, *args):
+        """Quay về với dữ liệu scan"""
+        self.is_scanning = False
+        Clock.unschedule(self.scan_frame)
+        if self.camera:
+            try:
+                self.camera.play = False
+            except:
+                pass
+        home = self.manager.get_screen("home")
+        if hasattr(home, 'so_input'):
+            home.so_input.text = self.scanned_data
+        self.manager.current = "home"
 
 # ---------- HÀM TÌM FONT TRÊN HỆ THỐNG ----------
 def find_system_font_bold():
@@ -663,7 +728,6 @@ class PrinterManagerScreen(Screen):
         self.device_list.add_widget(self.container)
         layout.add_widget(self.device_list)
         
-        # Đã bỏ symbol 📷 🔄 📡
         btn_refresh = Button(text="Làm mới danh sách", size_hint_y=None, height=dp(40),
                              background_color=COLOR_PRIMARY, color=COLOR_WHITE, font_size=sp(14))
         btn_refresh.bind(on_release=lambda x: self.refresh_devices())
@@ -940,7 +1004,7 @@ class HomeScreen(Screen):
             self.manager.current = screen_name
 
     def open_scanner(self, *args):
-        """Mở màn hình scanner - chỉ trên Android"""
+        """Mở màn hình scanner"""
         if not is_android():
             Popup(title="Thông báo", 
                   content=Label(text="Tính năng scan chỉ hỗ trợ trên Android.\nVui lòng nhập mã đơn hàng thủ công."),
@@ -948,29 +1012,13 @@ class HomeScreen(Screen):
             return
         
         try:
-            # Xin quyền Camera
-            if not check_permission(Permission.CAMERA):
-                request_permissions([Permission.CAMERA])
-                time.sleep(0.5)
-            
-            if not check_permission(Permission.CAMERA):
-                Popup(title="Lỗi", 
-                      content=Label(text="Không có quyền Camera.\nVui lòng cấp quyền trong Settings."),
-                      size_hint=(.8,.4)).open()
-                return
-            
             # Thêm ScannerScreen vào manager nếu chưa có
             if not self.manager.has_screen("scanner"):
-                scanner_class = globals().get('ScannerScreen')
-                if scanner_class:
-                    self.manager.add_widget(scanner_class(name="scanner"))
-                else:
-                    Popup(title="Lỗi", content=Label(text="Không thể tạo ScannerScreen"),
-                          size_hint=(.8,.4)).open()
-                    return
+                self.manager.add_widget(ScannerScreen(name="scanner"))
             
             self.manager.current = "scanner"
         except Exception as e:
+            print(f"Open scanner error: {e}")
             Popup(title="Lỗi", content=Label(text=f"Không thể mở camera:\n{str(e)[:50]}"),
                   size_hint=(.8,.4)).open()
 
