@@ -1,11 +1,13 @@
-<!-- android-manifest.xml -->
+<!-- android-permissions.xml -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.example.orderprinter">
     
-    <!-- QUYỀN CAMERA -->
+    <!-- QUYỀN CAMERA (Android 13+ cần foreground service) -->
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CAMERA" />
     
-    <!-- CAMERA FEATURE (required=false để chạy trên máy không có camera) -->
+    <!-- CAMERA FEATURE -->
     <uses-feature android:name="android.hardware.camera" android:required="false" />
     <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
     
@@ -17,7 +19,11 @@
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+    
+    <!-- STORAGE (Android <= 12) -->
+    <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"
+        android:maxSdkVersion="32" />
     
 </manifest>
