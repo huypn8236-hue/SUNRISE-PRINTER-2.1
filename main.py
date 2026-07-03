@@ -240,53 +240,158 @@ class ScannerScreen(Screen):
         self.is_scanning = False
         self.scanned_data = None
         self._camera_started = False
+        self._permission_retry_count = 0
+        self._permission_popup = None
 
     def on_enter(self):
-        """Khi vào màn hình, khởi tạo camera"""
+        """Khi vào màn hình, kiểm tra và xin quyền camera"""
         if not self._camera_started:
             if not is_android():
                 self.status_label.text = "❌ Camera chỉ hỗ trợ Android"
                 return
             
-            if not check_permission(Permission.CAMERA):
+            if check_permission(Permission.CAMERA):
+                self._init_camera()
+            else:
                 self.status_label.text = "Đang yêu cầu quyền camera..."
-                request_permissions([Permission.CAMERA])
-                Clock.schedule_once(self._check_permission_and_start, 1.5)
-                return
-            
-            self._init_camera()
+                self._permission_retry_count = 0
+                self._request_camera_permission()
 
-    def _check_permission_and_start(self, dt):
-        """Kiểm tra quyền sau khi request"""
+    def _request_camera_permission(self):
+        """Xin quyền camera"""
+        try:
+            request_permissions([Permission.CAMERA], self._on_permission_result)
+        except Exception as e:
+            print(f"Permission request error: {e}")
+            try:
+                request_permissions([Permission.CAMERA])
+                Clock.schedule_once(lambda dt: self._check_permission_retry(), 2)
+            except:
+                self.status_label.text = "❌ Không thể yêu cầu quyền"
+                Clock.schedule_once(lambda dt: self._show_permission_guide(), 0.3)
+
+    def _on_permission_result(self, permissions, grant_results):
+        """Callback khi user trả lời hộp thoại quyền"""
+        print(f"Permission result: {permissions} -> {grant_results}")
+        
+        if grant_results and len(grant_results) > 0 and grant_results[0]:
+            self.status_label.text = "Đã cấp quyền, đang mở camera..."
+            Clock.schedule_once(lambda dt: self._init_camera(), 0.5)
+        else:
+            self.status_label.text = "❌ Chưa cấp quyền Camera"
+            Clock.schedule_once(lambda dt: self._show_permission_guide(), 0.3)
+
+    def _check_permission_retry(self):
+        """Kiểm tra lại quyền"""
         if check_permission(Permission.CAMERA):
             self._init_camera()
         else:
-            self.status_label.text = "❌ Chưa cấp quyền Camera\nVào Cài đặt để cấp quyền"
+            self._permission_retry_count += 1
+            if self._permission_retry_count < 5:
+                self.status_label.text = f"Đang đợi cấp quyền... ({self._permission_retry_count}/5)"
+                Clock.schedule_once(lambda dt: self._check_permission_retry(), 1)
+            else:
+                self.status_label.text = "❌ Chưa cấp quyền Camera"
+                Clock.schedule_once(lambda dt: self._show_permission_guide(), 0.3)
+
+    def _show_permission_guide(self):
+        """Popup hướng dẫn khi không có quyền camera"""
+        if self._permission_popup:
+            return  # Đã có popup đang mở
+        
+        content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
+        
+        guide_text = (
+            "Camera chưa được cấp quyền.\n\n"
+            "Vui lòng thử 1 trong 2 cách:\n\n"
+            "CÁCH 1: Bấm 'Mở Cài đặt'\n"
+            "-> Tìm mục Quyền -> Bật Camera\n"
+            "(nếu không thấy mục Camera, dùng Cách 2)\n\n"
+            "CÁCH 2: Vào Cài đặt điện thoại\n"
+            "-> Ứng dụng -> Order Printer\n"
+            "-> Quyền -> Bật Camera\n\n"
+            "Sau đó bấm nút SCAN lại."
+        )
+        lbl = Label(text=guide_text, font_size=sp(14), halign='left', valign='top')
+        lbl.bind(size=lambda instance, value: setattr(instance, 'text_size', (value[0] - dp(20), None)))
+        content.add_widget(lbl)
+        
+        btn_box = BoxLayout(size_hint_y=None, height=dp(44), spacing=dp(10))
+        
+        btn_open_settings = Button(
+            text="Mở Cài đặt", 
+            font_size=sp(14),
+            background_color=COLOR_PRIMARY, 
+            color=COLOR_WHITE
+        )
+        btn_open_settings.bind(on_release=self._open_app_settings)
+        
+        btn_manual = Button(
+            text="Nhập tay", 
+            font_size=sp(14),
+            background_color=COLOR_SUCCESS, 
+            color=COLOR_WHITE
+        )
+        btn_manual.bind(on_release=self._go_back_and_manual)
+        
+        btn_box.add_widget(btn_open_settings)
+        btn_box.add_widget(btn_manual)
+        content.add_widget(btn_box)
+        
+        self._permission_popup = Popup(
+            title="Cần cấp quyền Camera",
+            content=content,
+            size_hint=(0.92, 0.55),
+            auto_dismiss=True
+        )
+        self._permission_popup.bind(on_dismiss=lambda x: setattr(self, '_permission_popup', None))
+        self._permission_popup.open()
+
+    def _open_app_settings(self, *args):
+        """Mở App Settings"""
+        try:
+            if is_android():
+                Intent = autoclass('android.content.Intent')
+                Settings = autoclass('android.provider.Settings')
+                Uri = autoclass('android.net.Uri')
+                PythonActivity = autoclass('org.kivy.android.PythonActivity')
+                
+                intent = Intent()
+                intent.setAction(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
+                uri = Uri.fromParts("package", PythonActivity.getPackageName(), None)
+                intent.setData(uri)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                PythonActivity.mActivity.startActivity(intent)
+        except Exception as e:
+            print(f"Open settings error: {e}")
+
+    def _go_back_and_manual(self, *args):
+        """Quay về home để nhập tay"""
+        self.go_back()
 
     def _init_camera(self):
         """Khởi tạo camera"""
         try:
             self.status_label.text = "Đang mở camera..."
             
-            # Tạo camera với độ phân giải thấp hơn để tránh lag
-            self.camera = Camera(resolution=(320, 240), play=False)
+            self.camera = Camera(resolution=(640, 480), play=False)
             self.camera_placeholder.add_widget(self.camera)
             
-            # Delay một chút rồi mới play
-            Clock.schedule_once(self._start_camera_play, 0.3)
+            Clock.schedule_once(self._start_camera_play, 0.5)
             
         except Exception as e:
             self.status_label.text = f"❌ Lỗi camera: {str(e)[:40]}"
             print(f"Camera init error: {e}")
 
     def _start_camera_play(self, dt):
-        """Bắt đầu camera sau delay"""
+        """Bắt đầu camera"""
         try:
-            self.camera.play = True
-            self._camera_started = True
-            self.status_label.text = "Đang scan..."
-            self.is_scanning = True
-            Clock.schedule_interval(self.scan_frame, 0.5)
+            if self.camera:
+                self.camera.play = True
+                self._camera_started = True
+                self.status_label.text = "Đang scan..."
+                self.is_scanning = True
+                Clock.schedule_interval(self.scan_frame, 0.5)
         except Exception as e:
             self.status_label.text = f"❌ Không thể mở camera: {str(e)[:40]}"
             print(f"Camera play error: {e}")
@@ -300,13 +405,12 @@ class ScannerScreen(Screen):
                 self.camera.play = False
             except:
                 pass
+        if self._permission_popup:
+            self._permission_popup.dismiss()
 
     def scan_frame(self, dt):
         """Quét frame từ camera"""
-        if not self.is_scanning:
-            return
-        
-        if not self.camera or not self.camera.texture:
+        if not self.is_scanning or not self.camera or not self.camera.texture:
             return
         
         try:
@@ -316,7 +420,6 @@ class ScannerScreen(Screen):
             if texture is None:
                 return
             
-            # Lấy pixels từ texture
             pixels_data = texture.pixels
             width = int(texture.width)
             height = int(texture.height)
@@ -324,11 +427,9 @@ class ScannerScreen(Screen):
             if not pixels_data or width == 0 or height == 0:
                 return
             
-            # Chuyển thành PIL Image
             img = Image.frombytes('RGBA', (width, height), pixels_data)
             img = img.convert('RGB')
             
-            # Quét barcode
             barcodes = decode(img)
             if barcodes:
                 for barcode in barcodes:
