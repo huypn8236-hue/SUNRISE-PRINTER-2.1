@@ -22,15 +22,17 @@ requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,camera4kivy
 
 # --- Quyền Android ---
 # 🟢 Thêm INTERNET + ACCESS_NETWORK_STATE để in Wi-Fi hoạt động
-android.permissions = INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,CAMERA,FOREGROUND_SERVICE,FOREGROUND_SERVICE_CAMERA
+android.permissions = CAMERA,FOREGROUND_SERVICE,FOREGROUND_SERVICE_CAMERA,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
 
 # === SỬ DỤNG FILE MANIFEST TỰ TẠO ===
 android.manifest = android-permissions.xml
 
 # === QUAN TRỌNG: CAMERA FEATURE (required=false) ===
 android.manifest.extra = 
-<uses-feature android:name="android.hardware.camera" android:required="false" />
-<uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+<uses-feature android:name="android.hardware.camera" android:required="true" />
+
+# === METADATA ĐỂ ANDROID NHẬN DIỆN CAMERA ===
+android.meta_data = android.hardware.camera
 
 # === LIBZBAR (BẮT BUỘC CHO PYZBAR TRÊN ANDROID) ===
 android.add_src = libzbar
