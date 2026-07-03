@@ -45,13 +45,10 @@ jobs:
         # Tạo android-permissions.xml nếu chưa có
         if [ ! -f "android-permissions.xml" ]; then
           cat > android-permissions.xml << 'XMLEOF'
+<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.example.orderprinter">
-    
-    <!-- QUYỀN CAMERA -->
     <uses-permission android:name="android.permission.CAMERA" />
-    
-    <!-- QUYỀN BLUETOOTH -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
     <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
@@ -59,11 +56,8 @@ jobs:
     <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <uses-permission android:name="android.permission.INTERNET" />
-    
-    <!-- CAMERA FEATURE -->
     <uses-feature android:name="android.hardware.camera" android:required="true" />
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
-    
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="true" />
 </manifest>
 XMLEOF
           echo "✅ Created android-permissions.xml"
@@ -162,11 +156,9 @@ XMLEOF
 
         android.permissions = CAMERA,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION
 
-        # === CAMERA MANIFEST EXTRA (QUAN TRỌNG) ===
         android.manifest = android-permissions.xml
         android.manifest.extra = <uses-feature android:name="android.hardware.camera" android:required="true" />
 
-        # Đã tạo file này ở bước trên
         android.add_assets = wifi_printers.json
 
         presplash.filename = %(source.dir)s/icon.png
