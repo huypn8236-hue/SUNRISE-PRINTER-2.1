@@ -42,24 +42,15 @@ jobs:
           convert -size 512x512 xc:blue icon.png || echo "⚠️ ImageMagick not installed"
         fi
 
-        # Tạo android-permissions.xml nếu chưa có
+        # Tạo android-permissions.xml với CAMERA
         if [ ! -f "android-permissions.xml" ]; then
-          cat > android-permissions.xml << 'XMLEOF'
-<?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="org.example.orderprinter">
-    <uses-permission android:name="android.permission.CAMERA" />
-    <uses-permission android:name="android.permission.BLUETOOTH" />
-    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
-    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
-    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
-    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
-    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-feature android:name="android.hardware.camera" android:required="true" />
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="true" />
-</manifest>
-XMLEOF
+          printf '%s\n' '<?xml version="1.0" encoding="utf-8"?>' > android-permissions.xml
+          printf '%s\n' '<manifest xmlns:android="http://schemas.android.com/apk/res/android"' >> android-permissions.xml
+          printf '%s\n' '    package="org.example.orderprinter">' >> android-permissions.xml
+          printf '%s\n' '    <uses-permission android:name="android.permission.CAMERA" />' >> android-permissions.xml
+          printf '%s\n' '    <uses-feature android:name="android.hardware.camera" android:required="true" />' >> android-permissions.xml
+          printf '%s\n' '    <uses-feature android:name="android.hardware.camera.autofocus" android:required="true" />' >> android-permissions.xml
+          printf '%s\n' '</manifest>' >> android-permissions.xml
           echo "✅ Created android-permissions.xml"
         fi
 
