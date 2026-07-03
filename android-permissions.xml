@@ -9,7 +9,7 @@
     
     <!-- CAMERA FEATURE -->
     <uses-feature android:name="android.hardware.camera" android:required="true" />
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="true" />
     
     <!-- QUYỀN BLUETOOTH -->
     <uses-permission android:name="android.permission.BLUETOOTH" />
