@@ -42,6 +42,33 @@ jobs:
           convert -size 512x512 xc:blue icon.png || echo "⚠️ ImageMagick not installed"
         fi
 
+        # Tạo android-permissions.xml nếu chưa có
+        if [ ! -f "android-permissions.xml" ]; then
+          cat > android-permissions.xml << 'XMLEOF'
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="org.example.orderprinter">
+    
+    <!-- QUYỀN CAMERA -->
+    <uses-permission android:name="android.permission.CAMERA" />
+    
+    <!-- QUYỀN BLUETOOTH -->
+    <uses-permission android:name="android.permission.BLUETOOTH" />
+    <uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+    <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+    <uses-permission android:name="android.permission.BLUETOOTH_SCAN" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.INTERNET" />
+    
+    <!-- CAMERA FEATURE -->
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
+    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+    
+</manifest>
+XMLEOF
+          echo "✅ Created android-permissions.xml"
+        fi
+
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -131,9 +158,13 @@ jobs:
         orientation = portrait
         fullscreen = 0
 
-        requirements = python3,kivy,pyjnius,pillow,plyer
+        requirements = python3,kivy,pyjnius,pillow,plyer,pyzbar
 
-        android.permissions = INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE
+        android.permissions = CAMERA,INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION
+
+        # === CAMERA MANIFEST EXTRA (QUAN TRỌNG) ===
+        android.manifest = android-permissions.xml
+        android.manifest.extra = <uses-feature android:name="android.hardware.camera" android:required="true" />
 
         # Đã tạo file này ở bước trên
         android.add_assets = wifi_printers.json
