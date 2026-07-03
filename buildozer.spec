@@ -29,7 +29,8 @@ android.manifest = android-permissions.xml
 
 # === QUAN TRỌNG: CAMERA FEATURE (required=false) ===
 android.manifest.extra = 
-<uses-feature android:name="android.hardware.camera" android:required="true" />
+    <uses-permission android:name="android.permission.CAMERA" />
+    <uses-feature android:name="android.hardware.camera" android:required="true" />
 
 # === METADATA ĐỂ ANDROID NHẬN DIỆN CAMERA ===
 android.meta_data = android.hardware.camera
