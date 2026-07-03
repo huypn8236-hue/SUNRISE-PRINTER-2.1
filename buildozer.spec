@@ -18,22 +18,22 @@ fullscreen = 0
 
 # --- Thư viện yêu cầu ---
 # ⚡ Dành riêng cho Android (Bluetooth + giao diện Kivy + Wi-Fi)
-requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar
+requirements = python3,kivy,pyjnius,pillow,plyer,certifi,pyzbar,camera4kivy
 
 # --- Quyền Android ---
 # 🟢 Thêm INTERNET + ACCESS_NETWORK_STATE để in Wi-Fi hoạt động
 android.permissions = INTERNET,ACCESS_NETWORK_STATE,BLUETOOTH,BLUETOOTH_ADMIN,BLUETOOTH_CONNECT,BLUETOOTH_SCAN,ACCESS_FINE_LOCATION,WRITE_EXTERNAL_STORAGE,READ_EXTERNAL_STORAGE,CAMERA
 
 # === SỬ DỤNG FILE MANIFEST TỰ TẠO ===
-android.manifest = android-manifest.xml
+android.manifest = android-permissions.xml
 
 # === THÊM DÒNG NÀY ĐỂ TẠO ĐÚNG MANIFEST ===
-android.manifest.extra = <uses-feature android:name="android.hardware.camera" android:required="false" />
+#android.manifest.extra = <uses-feature android:name="android.hardware.camera" android:required="false" />
 
 # === QUAN TRỌNG: CAMERA FEATURE (CHO PHÉP APP CHẠY TRÊN MÁY KHÔNG CÓ CAMERA) ===
-android.manifest.extra = 
-    <uses-feature android:name="android.hardware.camera" android:required="false" />
-    <uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
+#android.manifest.extra = 
+#<uses-feature android:name="android.hardware.camera" android:required="false" />
+#<uses-feature android:name="android.hardware.camera.autofocus" android:required="false" />
 
 # === LIBZBAR (BẮT BUỘC CHO PYZBAR TRÊN ANDROID) ===
 android.add_src = libzbar
