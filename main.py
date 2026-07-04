@@ -245,8 +245,15 @@ class ScannerScreen(Screen):
                           background_color=COLOR_SUCCESS, color=COLOR_WHITE)
         home_btn.bind(on_release=self.go_back_with_current_data)
         
+        # Nút toggle xoay camera
+        self.rotate_btn = Button(text="Xoay: ON", font_size=sp(12),
+                                 background_color=COLOR_WARNING, color=COLOR_WHITE,
+                                 size_hint_x=0.35)
+        self.rotate_btn.bind(on_release=self.toggle_rotation)
+        
         btn_box.add_widget(self.retry_btn)
         btn_box.add_widget(home_btn)
+        btn_box.add_widget(self.rotate_btn)
         self.layout.add_widget(btn_box)
         
         self.add_widget(self.layout)
@@ -257,6 +264,7 @@ class ScannerScreen(Screen):
         self._camera_started = False
         self._permission_retry_count = 0
         self._permission_popup = None
+        self._use_rotation = True  # Mặc định bật xoay
 
     def on_enter(self):
         """Mỗi lần vào màn hình scan đều reset camera hoàn toàn"""
@@ -399,6 +407,18 @@ class ScannerScreen(Screen):
         """Quay về home để nhập tay"""
         self.go_back()
 
+    def toggle_rotation(self, *args):
+        """Bật/tắt xoay camera"""
+        self._use_rotation = not self._use_rotation
+        if self._use_rotation:
+            self.rotate_btn.text = "Xoay: ON"
+            self.rotate_btn.background_color = COLOR_WARNING
+        else:
+            self.rotate_btn.text = "Xoay: OFF"
+            self.rotate_btn.background_color = COLOR_GRAY
+        # Reset camera để áp dụng
+        self.restart_scan()
+
     def restart_scan(self, *args):
         """Quét lại - reset hoàn toàn camera + xóa data đã scan"""
         self.scanned_data = None  # Xóa data cũ
@@ -407,24 +427,30 @@ class ScannerScreen(Screen):
         Clock.schedule_once(lambda dt: self._init_camera(), 0.3)
 
     def _init_camera(self):
-        """Khởi tạo camera 960x720 với xoay hiển thị - Scatter fill đúng kích thước"""
+        """Khởi tạo camera 960x720 - có toggle xoay"""
         try:
-            from kivy.uix.scatter import Scatter
-            
             self.status_label.text = "Đang mở camera..."
             
             self.camera = Camera(resolution=(960, 720), play=False)
             self.camera_placeholder.clear_widgets()
             
-            # Scatter với rotation=-90 để sửa lật trái, fill toàn bộ placeholder
-            scatter = Scatter(
-                do_translation=False, 
-                do_scale=False, 
-                rotation=-90,
-                size_hint=(1, 1)  # Fill toàn bộ camera_placeholder, không tràn ra ngoài
-            )
-            scatter.add_widget(self.camera)
-            self.camera_placeholder.add_widget(scatter)
+            if self._use_rotation:
+                # Có xoay - dùng Scatter bind size
+                from kivy.uix.scatter import Scatter
+                scatter = Scatter(
+                    do_translation=False, 
+                    do_scale=False, 
+                    rotation=-90,
+                    size_hint=(None, None)
+                )
+                scatter.add_widget(self.camera)
+                self.camera_placeholder.bind(
+                    size=lambda instance, value: setattr(scatter, 'size', value)
+                )
+                self.camera_placeholder.add_widget(scatter)
+            else:
+                # Không xoay - camera to rõ
+                self.camera_placeholder.add_widget(self.camera)
             
             Clock.schedule_once(self._start_camera_play, 0.5)
             
