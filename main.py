@@ -215,23 +215,23 @@ class ScannerScreen(Screen):
         back_btn = Button(text="Trang chủ", font_size=sp(14), size_hint_x=None, width=dp(80),
                           background_color=COLOR_GRAY, color=COLOR_WHITE)
         back_btn.bind(on_release=self.go_back)
-        title = Label(text="SCAN BARCODE", font_size=sp(16), bold=True, color=COLOR_PRIMARY_DARK)
+        title = Label(text="SCAN BARCODE / QR", font_size=sp(16), bold=True, color=COLOR_PRIMARY_DARK)
         header.add_widget(back_btn)
         header.add_widget(title)
         self.layout.add_widget(header)
         
         # Status
         self.status_label = Label(text="Đang khởi tạo camera...", font_size=sp(14),
-                                  size_hint_y=None, height=dp(36), color=COLOR_GRAY)
+                                  size_hint_y=None, height=dp(30), color=COLOR_GRAY)
         self.layout.add_widget(self.status_label)
         
         # Camera placeholder
-        self.camera_placeholder = BoxLayout(size_hint=(1, 0.8))
+        self.camera_placeholder = BoxLayout(size_hint=(1, 0.75))
         self.layout.add_widget(self.camera_placeholder)
         
         # Result
         self.result_label = Label(text="", font_size=sp(16), size_hint_y=None,
-                                  height=dp(36), color=COLOR_SUCCESS, bold=True)
+                                  height=dp(30), color=COLOR_SUCCESS, bold=True)
         self.layout.add_widget(self.result_label)
         
         # Buttons
@@ -260,20 +260,7 @@ class ScannerScreen(Screen):
 
     def on_enter(self):
         """Mỗi lần vào màn hình scan đều reset camera hoàn toàn"""
-        self.is_scanning = False
-        Clock.unschedule(self.scan_frame)
-        self.scanned_data = None
-        self.result_label.text = ""
-        
-        # Tắt camera cũ nếu có
-        if self.camera:
-            try:
-                self.camera.play = False
-                self.camera_placeholder.remove_widget(self.camera)
-            except:
-                pass
-        self.camera = None
-        self._camera_started = False
+        self._reset_camera_state()
         
         if not is_android():
             self.status_label.text = "Camera chỉ hỗ trợ Android"
@@ -285,6 +272,22 @@ class ScannerScreen(Screen):
             self.status_label.text = "Đang yêu cầu quyền camera..."
             self._permission_retry_count = 0
             self._request_camera_permission()
+
+    def _reset_camera_state(self):
+        """Reset toàn bộ trạng thái camera"""
+        self.is_scanning = False
+        Clock.unschedule(self.scan_frame)
+        self.scanned_data = None
+        self.result_label.text = ""
+        
+        if self.camera:
+            try:
+                self.camera.play = False
+                self.camera_placeholder.remove_widget(self.camera)
+            except:
+                pass
+        self.camera = None
+        self._camera_started = False
 
     def _request_camera_permission(self):
         """Xin quyền camera"""
@@ -397,34 +400,19 @@ class ScannerScreen(Screen):
         self.go_back()
 
     def restart_scan(self, *args):
-        """Quét lại - reset hoàn toàn camera"""
-        self.is_scanning = False
-        Clock.unschedule(self.scan_frame)
-        self.scanned_data = None
-        self.result_label.text = ""
+        """Quét lại - reset hoàn toàn camera như khởi động lại app"""
         self.status_label.text = "Đang khởi động lại camera..."
-        
-        # Tắt camera cũ
-        if self.camera:
-            try:
-                self.camera.play = False
-                self.camera_placeholder.remove_widget(self.camera)
-            except:
-                pass
-        self.camera = None
-        self._camera_started = False
-        
-        # Mở lại camera
+        self._reset_camera_state()
         Clock.schedule_once(lambda dt: self._init_camera(), 0.3)
 
     def _init_camera(self):
-        """Khởi tạo camera với xoay hiển thị"""
+        """Khởi tạo camera 640x480 với xoay hiển thị"""
         try:
             from kivy.uix.scatter import Scatter
             
             self.status_label.text = "Đang mở camera..."
             
-            self.camera = Camera(resolution=(960, 720), play=False)
+            self.camera = Camera(resolution=(640, 480), play=False)
             self.camera_placeholder.clear_widgets()
             
             # Xoay -90 độ để sửa hiển thị camera bị lật
@@ -435,6 +423,7 @@ class ScannerScreen(Screen):
             Clock.schedule_once(self._start_camera_play, 0.5)
             
         except Exception as e:
+            # Fallback không xoay
             try:
                 self.camera = Camera(resolution=(640, 480), play=False)
                 self.camera_placeholder.clear_widgets()
@@ -470,7 +459,7 @@ class ScannerScreen(Screen):
             self._permission_popup.dismiss()
 
     def scan_frame(self, dt):
-        """Quét frame từ camera - thử nhiều hướng xoay"""
+        """Quét frame từ camera - hỗ trợ Code 128 và QR"""
         if not self.is_scanning or not self.camera or not self.camera.texture:
             return
         
@@ -490,7 +479,7 @@ class ScannerScreen(Screen):
             
             img = Image.frombytes('RGBA', (width, height), pixels_data)
             
-            # Thử scan với nhiều góc xoay
+            # Thử scan với nhiều góc xoay để bắt được cả Code 128 và QR
             barcodes = None
             rotations = [0, 90, -90, 180, 270]
             
@@ -507,13 +496,14 @@ class ScannerScreen(Screen):
             if barcodes:
                 for barcode in barcodes:
                     data = barcode.data.decode('utf-8')
+                    barcode_type = barcode.type
                     self.scanned_data = data
                     self.result_label.text = f"Đã quét: {data}"
-                    self.status_label.text = "Đã nhận diện! Đang quay về..."
+                    self.status_label.text = f"Đã nhận diện {barcode_type}! Đang quay về..."
                     self.is_scanning = False
                     Clock.unschedule(self.scan_frame)
-                    # Tự động về home sau 0.8s
-                    Clock.schedule_once(lambda dt: self.go_back_with_data(), 0.8)
+                    # Tự động về home sau 0.5s
+                    Clock.schedule_once(lambda dt: self.go_back_with_data(), 0.5)
                     break
         except ImportError:
             self.status_label.text = "pyzbar chưa được cài"
@@ -524,30 +514,12 @@ class ScannerScreen(Screen):
 
     def go_back(self, *args):
         """Quay về không dữ liệu"""
-        self.is_scanning = False
-        Clock.unschedule(self.scan_frame)
-        if self.camera:
-            try:
-                self.camera.play = False
-                self.camera_placeholder.remove_widget(self.camera)
-            except:
-                pass
-        self.camera = None
-        self._camera_started = False
+        self._reset_camera_state()
         self.manager.current = "home"
 
     def go_back_with_data(self, *args):
         """Quay về với dữ liệu scan - tự động điền vào SO"""
-        self.is_scanning = False
-        Clock.unschedule(self.scan_frame)
-        if self.camera:
-            try:
-                self.camera.play = False
-                self.camera_placeholder.remove_widget(self.camera)
-            except:
-                pass
-        self.camera = None
-        self._camera_started = False
+        self._reset_camera_state()
         home = self.manager.get_screen("home")
         if hasattr(home, 'so_input') and self.scanned_data:
             home.so_input.text = self.scanned_data
@@ -555,16 +527,7 @@ class ScannerScreen(Screen):
 
     def go_back_with_current_data(self, *args):
         """Quay về với dữ liệu đã scan (nếu có) - nút Trang chủ"""
-        self.is_scanning = False
-        Clock.unschedule(self.scan_frame)
-        if self.camera:
-            try:
-                self.camera.play = False
-                self.camera_placeholder.remove_widget(self.camera)
-            except:
-                pass
-        self.camera = None
-        self._camera_started = False
+        self._reset_camera_state()
         home = self.manager.get_screen("home")
         if hasattr(home, 'so_input') and self.scanned_data:
             home.so_input.text = self.scanned_data
@@ -864,7 +827,6 @@ def get_label_zpl_bytes(order_id, customer, box_index, box_total):
     img = create_zpl_raster(order_id, customer, box_index, box_total,
                             width_mm=115, height_mm=70, dpi=203)
 
-    # Giữ nguyên chunk 30KB an toàn
     chunks = pil_to_zpl_gf_chunked(img, max_bytes_per_chunk=30*1024)
 
     width_px, height_px = img.size
@@ -1238,7 +1200,7 @@ class HomeScreen(Screen):
             save_selected_printer(mac, name)
 
         test_data = b'^XA\n^FO50,50^ADN,36,20^FDTest Print^FS\n'
-        test_data += b'^FO50,80^ADN,24,16^FDDevelop by Huy Pham Copyright.^FS\n'
+        test_data += b'^FO50,80^ADN,24,16^FDDevelop by Huy Pham.^FS\n'
         test_data += b'^XZ\n'
 
         popup_content = BoxLayout(orientation='vertical', spacing=dp(10), padding=dp(10))
