@@ -274,10 +274,9 @@ class ScannerScreen(Screen):
             self._request_camera_permission()
 
     def _reset_camera_state(self):
-        """Reset toàn bộ trạng thái camera"""
+        """Reset toàn bộ trạng thái camera (giữ scanned_data để dùng trước khi reset)"""
         self.is_scanning = False
         Clock.unschedule(self.scan_frame)
-        self.scanned_data = None
         self.result_label.text = ""
         
         if self.camera:
@@ -288,6 +287,7 @@ class ScannerScreen(Screen):
                 pass
         self.camera = None
         self._camera_started = False
+        # KHÔNG reset self.scanned_data ở đây
 
     def _request_camera_permission(self):
         """Xin quyền camera"""
@@ -400,23 +400,29 @@ class ScannerScreen(Screen):
         self.go_back()
 
     def restart_scan(self, *args):
-        """Quét lại - reset hoàn toàn camera như khởi động lại app"""
+        """Quét lại - reset hoàn toàn camera + xóa data đã scan"""
+        self.scanned_data = None  # Xóa data cũ
         self.status_label.text = "Đang khởi động lại camera..."
         self._reset_camera_state()
         Clock.schedule_once(lambda dt: self._init_camera(), 0.3)
 
     def _init_camera(self):
-        """Khởi tạo camera 640x480 với xoay hiển thị"""
+        """Khởi tạo camera 960x720 với xoay hiển thị - Scatter fill đúng kích thước"""
         try:
             from kivy.uix.scatter import Scatter
             
             self.status_label.text = "Đang mở camera..."
             
-            self.camera = Camera(resolution=(640, 480), play=False)
+            self.camera = Camera(resolution=(960, 720), play=False)
             self.camera_placeholder.clear_widgets()
             
-            # Xoay -90 độ để sửa hiển thị camera bị lật
-            scatter = Scatter(do_translation=False, do_scale=False, rotation=-90)
+            # Scatter với rotation=-90 để sửa lật trái, fill toàn bộ placeholder
+            scatter = Scatter(
+                do_translation=False, 
+                do_scale=False, 
+                rotation=-90,
+                size_hint=(1, 1)  # Fill toàn bộ camera_placeholder, không tràn ra ngoài
+            )
             scatter.add_widget(self.camera)
             self.camera_placeholder.add_widget(scatter)
             
@@ -497,7 +503,7 @@ class ScannerScreen(Screen):
                 for barcode in barcodes:
                     data = barcode.data.decode('utf-8')
                     barcode_type = barcode.type
-                    self.scanned_data = data
+                    self.scanned_data = data  # Lưu data
                     self.result_label.text = f"Đã quét: {data}"
                     self.status_label.text = f"Đã nhận diện {barcode_type}! Đang quay về..."
                     self.is_scanning = False
@@ -514,23 +520,30 @@ class ScannerScreen(Screen):
 
     def go_back(self, *args):
         """Quay về không dữ liệu"""
+        self.scanned_data = None
         self._reset_camera_state()
         self.manager.current = "home"
 
     def go_back_with_data(self, *args):
-        """Quay về với dữ liệu scan - tự động điền vào SO"""
+        """Quay về với dữ liệu scan - LƯU DATA TRƯỚC KHI RESET"""
+        data = self.scanned_data  # Lưu lại trước khi reset
+        self.scanned_data = None
         self._reset_camera_state()
-        home = self.manager.get_screen("home")
-        if hasattr(home, 'so_input') and self.scanned_data:
-            home.so_input.text = self.scanned_data
+        if data:
+            home = self.manager.get_screen("home")
+            if hasattr(home, 'so_input'):
+                home.so_input.text = data
         self.manager.current = "home"
 
     def go_back_with_current_data(self, *args):
         """Quay về với dữ liệu đã scan (nếu có) - nút Trang chủ"""
+        data = self.scanned_data  # Lưu lại trước khi reset
+        self.scanned_data = None
         self._reset_camera_state()
-        home = self.manager.get_screen("home")
-        if hasattr(home, 'so_input') and self.scanned_data:
-            home.so_input.text = self.scanned_data
+        if data:
+            home = self.manager.get_screen("home")
+            if hasattr(home, 'so_input'):
+                home.so_input.text = data
         self.manager.current = "home"
 
 # ---------- HÀM TÌM FONT TRÊN HỆ THỐNG ----------
