@@ -551,25 +551,39 @@ class ScannerScreen(Screen):
         self.manager.current = "home"
 
     def go_back_with_data(self, *args):
-        """Quay về với dữ liệu scan - LƯU DATA TRƯỚC KHI RESET"""
-        data = self.scanned_data  # Lưu lại trước khi reset
+        """Quay về với dữ liệu scan - tự động điền SO + Name nếu có 2 dòng"""
+        data = self.scanned_data
         self.scanned_data = None
         self._reset_camera_state()
         if data:
             home = self.manager.get_screen("home")
-            if hasattr(home, 'so_input'):
-                home.so_input.text = data
+            if '\n' in data:
+                lines = data.strip().split('\n')
+                if hasattr(home, 'so_input') and len(lines) >= 1:
+                    home.so_input.text = lines[0].strip()
+                if hasattr(home, 'name_input') and len(lines) >= 2:
+                    home.name_input.text = lines[1].strip()
+            else:
+                if hasattr(home, 'so_input'):
+                    home.so_input.text = data
         self.manager.current = "home"
 
     def go_back_with_current_data(self, *args):
-        """Quay về với dữ liệu đã scan (nếu có) - nút Trang chủ"""
-        data = self.scanned_data  # Lưu lại trước khi reset
+        """Quay về với dữ liệu đã scan - nút Trang chủ"""
+        data = self.scanned_data
         self.scanned_data = None
         self._reset_camera_state()
         if data:
             home = self.manager.get_screen("home")
-            if hasattr(home, 'so_input'):
-                home.so_input.text = data
+            if '\n' in data:
+                lines = data.strip().split('\n')
+                if hasattr(home, 'so_input') and len(lines) >= 1:
+                    home.so_input.text = lines[0].strip()
+                if hasattr(home, 'name_input') and len(lines) >= 2:
+                    home.name_input.text = lines[1].strip()
+            else:
+                if hasattr(home, 'so_input'):
+                    home.so_input.text = data
         self.manager.current = "home"
 
 # ---------- HÀM TÌM FONT TRÊN HỆ THỐNG ----------
